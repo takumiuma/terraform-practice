@@ -47,26 +47,32 @@ variable "server_port" {
 # Auto Scaling Group(ASG)とは、EC2インスタンスのグループを作成し、
 # 負荷に応じてインスタンスの数を自動的に増減させるためのサービス。
 
-# ASG内のインスタンスに適用するLaunch Configurationを作成
-resource "aws_launch_configuration" "example" {
-  image_id        = "ami-0fb653ca2d3203ac1"
-  instance_type   = "t2.micro"
-  security_groups = [aws_security_group.instance.id]
+# ASG内のインスタンスに適用するLaunch Templateを作成
+resource "aws_launch_template" "example" {
+  name_prefix   = "terraform-launch-template-example"
+  image_id      = "ami-0fb653ca2d3203ac1"
+  instance_type = "t2.micro"
 
-  user_data = <<-EOF
+  vpc_security_group_ids = [aws_security_group.instance.id]
+
+  user_data = base64encode(<<-EOF
               #!/bin/bash
               echo "Hello, World!" > index.html
               nohup busybox httpd -f -p ${var.server_port} &
               EOF
+  )
 
-  # Auto Scaling Group がある起動設定を使った場合に必須
   lifecycle {
     create_before_destroy = true
   }
 }
 
 resource "aws_autoscaling_group" "example" {
-  launch_configuration = aws_launch_configuration.example.name
+  launch_template {
+    id      = aws_launch_template.example.id
+    version = "$Latest"
+  }
+
   vpc_zone_identifier = data.aws_subnets.default.ids
 
   min_size = 2

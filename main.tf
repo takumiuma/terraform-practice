@@ -96,3 +96,48 @@ data "aws_subnets" "default" {
     values = [data.aws_vpc.default.id]
   }
 }
+
+# aws_lbリソースは、ロードバランサーを作成するためのもの
+resource "aws_lb" "example" {
+  name               = "terraform-lb-example"
+  load_balancer_type = "application"
+  subnets            = data.aws_subnets.default.ids # VPCのサブネットを指定
+  security_groups    = [aws_security_group.alb.id] # ALBのセキュリティグループを指定
+}
+
+# リスナーは、ロードバランサーが受け付けるトラフィックのルールを定義する
+resource "aws_lb_listener" "example" {
+  load_balancer_arn = aws_lb.example.arn
+  port              = 80
+  protocol          = "HTTP"
+  default_action {
+    type = "fixed-response"
+
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "404: page not found"
+      status_code  = "404"
+    }
+  }
+}
+
+# セキュリティグループを作成し、ロードバランサーのインバウンドとアウトバウンドのトラフィックを制御する
+resource "aws_security_group" "alb" {
+  name        = "terraform-example-alb"
+
+  # インバウンドルールを定義
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # セキュリティ的に良くないので、使ってない時はEC2インスタンスを停止or削除
+  }
+
+  # アウトバウンドルールを定義
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1" # 全てのプロトコルを許可
+    cidr_blocks = ["0.0.0.0/0"] # 全てのIPアドレスからのアウトバウンドトラフィックを許可
+  }
+}

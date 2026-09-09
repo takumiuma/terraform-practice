@@ -1,9 +1,6 @@
-# Team-Level Rules
+# チーム practices
 
-> This team's affirmed practices and corrections. Loaded after `org.md` as
-> strict-additive guidance; contradictions with broader policy are rejected.
-> Populated by the practices-discovery affirmation gate. Edit at the gate,
-> not directly.
+> グリーンフィールド・単独開発・学習/実験目的のプロジェクト向け。`org.md` の各セクションを「推奨デフォルト」として参照し、Gin(Go) + Terraform + AWS ECS の低コスト・エフェメラル運用に合わせて調整している。LEAD ドラフトに3つの支援コントリビューション（quality / developer / devsecops）と人間インタビュー（Q1〜Q7 すべて確認済み）を統合した内容。
 
 ## Way of Working
 
@@ -70,14 +67,3 @@ Terraform:
 - サードパーティの GitHub Action はコミット SHA でピン留めする。
 
 <!-- Confirmed by human (summary-confirmation: Looks correct). -->
-## Forbidden
-
-<!-- Team-specific forbidden patterns -->
-
-## Mandated
-
-<!-- Team-specific mandates -->
-
-## Corrections
-
-<!-- Self-learning loop appends here. -->

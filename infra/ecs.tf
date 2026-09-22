@@ -71,8 +71,9 @@ resource "aws_ecs_service" "app" {
     assign_public_ip = true
   }
 
-  # image_tag は CI/CD 側で更新するため、タスク定義差し替えの検知に任せる
+  # task_definition は CI/CD 側（deploy.yml）が register-task-definition + update-service で更新するため、
+  # Terraform の apply で古い定義に巻き戻さないよう差分を無視する
   lifecycle {
-    ignore_changes = []
+    ignore_changes = [task_definition]
   }
 }

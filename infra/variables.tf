@@ -64,6 +64,11 @@ variable "db_password" {
   type        = string
   default     = ""
   sensitive   = true
+
+  validation {
+    condition     = !var.enable_db || length(var.db_password) >= 8
+    error_message = "enable_db=true の場合、db_password は8文字以上で指定してください（TF_VAR_db_password で渡す）。"
+  }
 }
 
 variable "db_instance_class" {

@@ -126,12 +126,23 @@ resource "aws_iam_role_policy_attachment" "task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# SSM SecureString の復号に使われるデフォルト KMS キー（alias/aws/ssm）
+data "aws_kms_alias" "ssm" {
+  count = var.enable_db ? 1 : 0
+  name  = "alias/aws/ssm"
+}
+
 # タスク実行ロールに SSM パラメータ読み取りを許可（DB 秘密の注入用）
+# SecureString の復号には ssm:GetParameters に加えて KMS キーへの kms:Decrypt が必要
 data "aws_iam_policy_document" "task_execution_ssm" {
   count = var.enable_db ? 1 : 0
   statement {
     actions   = ["ssm:GetParameters"]
     resources = [for p in aws_ssm_parameter.db : p.arn]
+  }
+  statement {
+    actions   = ["kms:Decrypt"]
+    resources = [data.aws_kms_alias.ssm[0].target_key_arn]
   }
 }
 

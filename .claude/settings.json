@@ -31,7 +31,8 @@
       "Bash(gh run list *)",
       "Bash(gh workflow view *)",
       "Bash(gh workflow list *)",
-      "Bash(gh pr create *)"
+      "Bash(gh pr create *)",
+      "Bash(gh pr edit *)"
     ],
     "deny": [
       "Bash(git reset *)",
@@ -85,7 +86,6 @@
       "Bash(gh issue pin *)",
       "Bash(gh issue transfer *)",
       "Bash(gh issue lock *)",
-      "Bash(gh pr edit *)",
       "Bash(gh pr close *)",
       "Bash(gh pr reopen *)",
       "Bash(gh pr merge *)",

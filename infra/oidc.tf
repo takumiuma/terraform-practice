@@ -1,8 +1,6 @@
 # GitHub Actions → AWS の OIDC 認証（create_github_oidc=true のときのみ）。
 # 長期アクセスキーを GitHub Secrets に置かず、OIDC でロールを引き受ける。
-# 信頼ポリシーは当該リポジトリの main ブランチに絞る。
-
-data "aws_caller_identity" "current" {}
+# 信頼ポリシーは当該リポジトリの master ブランチに絞る。
 
 resource "aws_iam_openid_connect_provider" "github" {
   count          = var.create_github_oidc ? 1 : 0
@@ -34,7 +32,7 @@ data "aws_iam_policy_document" "github_assume" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_owner}/${var.github_repo}:ref:refs/heads/main"]
+      values   = ["repo:${var.github_owner}/${var.github_repo}:ref:refs/heads/master"]
     }
   }
 }

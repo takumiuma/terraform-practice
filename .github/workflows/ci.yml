@@ -70,6 +70,10 @@ jobs:
 
       - name: tflint
         working-directory: infra
+        env:
+          # tflint --init のプラグイン取得が未認証だと GitHub API のレート制限に
+          # 引っかかりやすいため、GITHUB_TOKEN を渡して認証済みリクエストにする
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tflint --init
           tflint --recursive

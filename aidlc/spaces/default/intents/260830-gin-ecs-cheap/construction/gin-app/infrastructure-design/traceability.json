@@ -1,0 +1,38 @@
+{
+  "stage": "infrastructure-design",
+  "unit": "gin-app",
+  "upstream_ids": [
+    "NFR1.3",
+    "NFR2.2",
+    "NFR3.1",
+    "NFR4.1",
+    "NFR1.4"
+  ],
+  "coverage": [
+    {
+      "id": "NFR1.3",
+      "status": "OK",
+      "target": "Fargate 0.25vCPU/0.5GB task definition"
+    },
+    {
+      "id": "NFR1.4",
+      "status": "OK",
+      "target": "ECS service desired=1, no autoscaling"
+    },
+    {
+      "id": "NFR2.2",
+      "status": "OK",
+      "target": "/healthz used as ECS/smoke health check"
+    },
+    {
+      "id": "NFR3.1",
+      "status": "OK",
+      "target": "SSM Parameter Store + ECS task secrets injection; OIDC IAM role"
+    },
+    {
+      "id": "NFR4.1",
+      "status": "OK",
+      "target": "CloudWatch Logs group (short retention)"
+    }
+  ]
+}

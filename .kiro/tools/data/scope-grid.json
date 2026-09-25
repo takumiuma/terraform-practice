@@ -184,6 +184,43 @@
       "feedback-optimization": "EXECUTE"
     }
   },
+  "gin-ecs-cheapest-terraform": {
+    "stages": {
+      "workspace-scaffold": "EXECUTE",
+      "workspace-detection": "EXECUTE",
+      "state-init": "EXECUTE",
+      "intent-capture": "EXECUTE",
+      "market-research": "SKIP",
+      "feasibility": "SKIP",
+      "scope-definition": "SKIP",
+      "team-formation": "SKIP",
+      "rough-mockups": "SKIP",
+      "approval-handoff": "EXECUTE",
+      "reverse-engineering": "SKIP",
+      "practices-discovery": "EXECUTE",
+      "requirements-analysis": "EXECUTE",
+      "user-stories": "SKIP",
+      "refined-mockups": "SKIP",
+      "domain-design": "SKIP",
+      "units-generation": "EXECUTE",
+      "contract-design": "SKIP",
+      "delivery-planning": "EXECUTE",
+      "functional-design": "SKIP",
+      "nfr-requirements": "EXECUTE",
+      "nfr-design": "SKIP",
+      "infrastructure-design": "EXECUTE",
+      "code-generation": "EXECUTE",
+      "build-and-test": "EXECUTE",
+      "ci-pipeline": "SKIP",
+      "deployment-pipeline": "SKIP",
+      "environment-provisioning": "SKIP",
+      "deployment-execution": "SKIP",
+      "observability-setup": "SKIP",
+      "incident-response": "SKIP",
+      "performance-validation": "SKIP",
+      "feedback-optimization": "SKIP"
+    }
+  },
   "infra": {
     "stages": {
       "workspace-scaffold": "EXECUTE",

@@ -17,14 +17,14 @@ import (
 // DB 非依存の walking skeleton 構成として起動できるようにする。
 func OpenDB() (*gorm.DB, error) {
 	host := os.Getenv("DB_HOST")
-	if host == "" {
-		// DB 未設定なら skeleton モード（/healthz のみ）。
-		return nil, nil
-	}
-	port := getenvDefault("DB_PORT", "3306")
 	user := os.Getenv("DB_USER")
 	pass := os.Getenv("DB_PASSWORD")
 	name := os.Getenv("DB_NAME")
+	if host == "" || user == "" || pass == "" || name == "" {
+		// いずれか未設定なら skeleton モード（/healthz のみ）。
+		return nil, nil
+	}
+	port := getenvDefault("DB_PORT", "3306")
 
 	dsn := fmt.Sprintf(
 		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",

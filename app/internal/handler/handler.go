@@ -33,7 +33,7 @@ func NewRouter(db *gorm.DB) *gin.Engine {
 	return r
 }
 
-// registerItemRoutes は MySQL 上の Item に対する最小 CRUD を登録する。
+// registerItemRoutes は MySQL 上の Item に対する最小の read/write（作成・一覧）を登録する。
 func registerItemRoutes(r *gin.Engine, db *gorm.DB) {
 	// 作成: POST /items {"name": "..."}
 	r.POST("/items", func(c *gin.Context) {

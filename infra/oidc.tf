@@ -74,7 +74,16 @@ data "aws_iam_policy_document" "github_actions" {
       "ecs:DescribeTaskDefinition",
       "ecs:UpdateService",
       "ecs:DescribeServices",
+      "ecs:ListTasks",
+      "ecs:DescribeTasks",
     ]
+    resources = ["*"]
+  }
+
+  # スモークテスト（deploy.yml）でタスクのパブリック IP を割り出すために必要
+  statement {
+    sid       = "SmokeTestEni"
+    actions   = ["ec2:DescribeNetworkInterfaces"]
     resources = ["*"]
   }
 

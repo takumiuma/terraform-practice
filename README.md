@@ -26,7 +26,9 @@ legacy-ec2-practice/     過去の EC2/ASG/ALB 練習用コード（本命とは
 - **公開:** **ALB なし**。`http://<タスクのパブリックIP>:8080` に直接アクセス
 - **ECR:** scan-on-push(Basic) 有効、**イメージタグは IMMUTABLE**（同名タグの上書き不可）、コミット SHA タグ運用、`force_delete`（destroy で削除）
 - **DB（任意・Bolt2）:** RDS for MySQL `db.t4g.micro` / Single-AZ / 最小ストレージ / `skip_final_snapshot` / 非公開
-- **秘密:** SSM Parameter Store（SecureString）→ ECS タスクへ注入。コード/tfvars/state に平文で置かない
+- **秘密:** SSM Parameter Store（SecureString）→ ECS タスクへ注入。コード/tfvars には置かず `TF_VAR_db_password` で渡す。
+  ただし DB パスワードはローカル state に平文で残る（`sensitive` は表示を隠すだけ）。
+  学習・使い捨て（ダミーデータのみ、state はコミットしない）前提のため許容している
 - **state:** ローカル（`infra/` 内）。コミットしない（`.gitignore` 済み）
 
 ## エンドポイント
@@ -43,7 +45,7 @@ legacy-ec2-practice/     過去の EC2/ASG/ALB 練習用コード（本命とは
 
 - AWS アカウントと認証（`aws configure` 済み、または適切な権限のプロファイル）。
   作成先アカウントは `aws sts get-caller-identity` で事前確認できる
-- Terraform >= 1.6、Go 1.22+、Docker（ローカルビルド時）、`jq`（CIで使用）
+- Terraform >= 1.9、Go 1.22+、Docker（ローカルビルド時）、`jq`（CIで使用）
 - GitHub リポジトリ（CI/CD を使う場合）
 
 ## 使い方: 段階的に立てる
@@ -92,7 +94,7 @@ cd infra
 terraform apply -var="image_tag=$SHA"      # enable_db は既定の false
 ```
 
-### ステップ 2B: DB あり（MySQL CRUD）
+### ステップ 2B: DB あり（MySQL read/write 確認）
 
 ```bash
 cd infra
@@ -123,7 +125,7 @@ echo "IP = $IP"
 curl --fail "http://$IP:8080/healthz"          # -> {"status":"ok"}
 ```
 
-CRUD（`enable_db=true` のとき）:
+read/write 確認（`enable_db=true` のとき。作成・一覧のみで更新・削除はない）:
 
 ```bash
 # 作成
@@ -166,12 +168,18 @@ terraform state list        # 空なら Terraform 管理リソースは全て削
 
 ## CI/CD（GitHub Actions）
 
-`.github/workflows/deploy.yml` が `main` への push で実行:
+ワークフローは CI と CD で分割している。
 
-1. **CI:** `gofmt`/`go vet`/`golangci-lint`、`go test`、`gitleaks`、`terraform fmt/validate`（失敗でブロック）
-2. **build:** Docker イメージをビルドし ECR に push（タグ = コミット SHA）
-3. **deploy:** タスク定義の image を差し替えて register → service を update → 安定待ち
-4. **smoke:** 実行中タスクのパブリック IP に `curl --fail .../healthz`
+- `.github/workflows/ci.yml`: `master` への PR で実行（失敗でブロック）
+  1. `gofmt`/`go vet`/`golangci-lint`
+  2. `go test`
+  3. `gitleaks`（secret scan）
+  4. `terraform fmt/validate`
+  5. `tflint`
+- `.github/workflows/deploy.yml`: `master` への push で実行
+  1. **build:** Docker イメージをビルドし ECR に push（タグ = コミット SHA）
+  2. **deploy:** タスク定義の image を差し替えて register → service を update → 安定待ち
+  3. **smoke:** 実行中タスクのパブリック IP に `curl --fail .../healthz`
 
 ### 必要な設定
 

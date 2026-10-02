@@ -1,0 +1,96 @@
+name: deploy
+
+# master への push で CD（ビルド → ECR push → ECS デプロイ → スモーク）を実行。
+# 手動実行も可能。AWS 認証は OIDC + IAM ロール引き受け（長期キーなし）。
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # OIDC でトークンを取得するために必須
+
+env:
+  AWS_REGION: ap-northeast-1
+  ECR_REPOSITORY: gin-ecs-cheap
+  ECS_CLUSTER: gin-ecs-cheap
+  ECS_SERVICE: gin-ecs-cheap
+  ECS_TASK_FAMILY: gin-ecs-cheap
+  CONTAINER_NAME: gin-ecs-cheap
+  CONTAINER_PORT: "8080"
+
+jobs:
+  # ---------------------------------------------------------------
+  # CD: build → ECR push → ECS deploy → smoke
+  # ---------------------------------------------------------------
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image (SHA tag)
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build -t "$IMAGE" ./app
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Render new task definition
+        id: taskdef
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          # 既存のタスク定義を取得し、image を差し替えて register する
+          aws ecs describe-task-definition --task-definition "$ECS_TASK_FAMILY" \
+            --query 'taskDefinition' --output json > taskdef.json
+          # 登録に不要なフィールドを除去し、image を更新
+          jq --arg IMAGE "$IMAGE" --arg NAME "$CONTAINER_NAME" '
+            .containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end)
+            | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions, requiresCompatibilities, cpu, memory, runtimePlatform}
+          ' taskdef.json > new-taskdef.json
+          NEW_ARN=$(aws ecs register-task-definition --cli-input-json file://new-taskdef.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$NEW_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to ECS
+        env:
+          NEW_TASKDEF_ARN: ${{ steps.taskdef.outputs.arn }}
+        run: |
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+            --task-definition "$NEW_TASKDEF_ARN" --force-new-deployment
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+
+      - name: Smoke test (/healthz)
+        run: |
+          # 実行中タスクのパブリック IP を取得して /healthz を叩く
+          TASK_ARN=$(aws ecs list-tasks --cluster "$ECS_CLUSTER" --service-name "$ECS_SERVICE" \
+            --desired-status RUNNING --query 'taskArns[0]' --output text)
+          ENI=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" \
+            --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value | [0]" --output text)
+          IP=$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI" \
+            --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
+          echo "task public ip: $IP"
+          for i in 1 2 3 4 5; do
+            if curl --fail --max-time 5 "http://$IP:$CONTAINER_PORT/healthz"; then
+              echo "smoke test passed"
+              exit 0
+            fi
+            echo "retry $i..."; sleep 10
+          done
+          echo "smoke test failed"; exit 1

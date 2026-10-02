@@ -41,7 +41,7 @@ CI では以下を必須ゲートとし、失敗時はマージをブロック�
 - Terraform: `terraform fmt`、`terraform validate`、`tflint`。
 - シークレットスキャン: `gitleaks`（誤コミット検知でブロック）。
 
-GitHub Actions から AWS への認証は `aws-actions/configure-aws-credentials` を OIDC モード（`id-token: write` パーミッション + `role-to-assume`）で使い、`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` を GitHub Secrets に保存しない。信頼ポリシーの `sub` 条件は当該リポジトリ/ブランチ（例: `repo:<owner>/<repo>:ref:refs/heads/main`）に絞り、ワイルドカードを避ける。デプロイロールは ECR push + ECS デプロイ + 必要な Terraform 操作に絞る最小権限とする。サードパーティの GitHub Actions はメジャータグではなくコミット SHA でピン留めする。
+GitHub Actions から AWS への認証は `aws-actions/configure-aws-credentials` を OIDC モード（`id-token: write` パーミッション + `role-to-assume`）で使い、`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` を GitHub Secrets に保存しない。信頼ポリシーの `sub` 条件は当該リポジトリ/ブランチ（例: `repo:<owner>/<repo>:ref:refs/heads/main`）に絞り、ワイルドカードを避ける。デプロイロールは ECR push + ECS デプロイ + 必要な Terraform 操作に絞る最小権限とする。サードパーティの GitHub Actions はコミット SHA ではなく、`@v4` 等の読みやすいバージョンタグで指定する。
 
 ECR リポジトリは scan-on-push（Basic scanning・無料）を有効化する。イメージのベースは distroless か scratch など最小構成とし、Go のスタティックバイナリを載せて攻撃面とイメージサイズ（＝転送/ストレージコスト）を下げる。
 
@@ -67,7 +67,7 @@ Terraform:
 
 秘密の扱い（共通）:
 - 秘密はコードや tfvars にハードコードせず、SSM Parameter Store 等で扱う。
-- サードパーティの GitHub Action はコミット SHA でピン留めする。
+- サードパーティの GitHub Action はコミット SHA ではなく、`@v4` 等の読みやすいバージョンタグで指定する。
 
 <!-- Confirmed by human (summary-confirmation: Looks correct). -->
 ## Forbidden

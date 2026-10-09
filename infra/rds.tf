@@ -33,16 +33,19 @@ resource "aws_db_subnet_group" "db" {
 }
 
 resource "aws_db_instance" "mysql" {
-  count                       = var.enable_db ? 1 : 0
-  identifier                  = local.name
-  engine                      = "mysql"
-  engine_version              = "8.0"
-  instance_class              = var.db_instance_class
-  allocated_storage           = var.db_allocated_storage
-  storage_type                = "gp3"
-  db_name                     = var.db_name
-  username                    = var.db_username
-  password                    = var.db_password
+  count             = var.enable_db ? 1 : 0
+  identifier        = local.name
+  engine            = "mysql"
+  engine_version    = "8.0"
+  instance_class    = var.db_instance_class
+  allocated_storage = var.db_allocated_storage
+  storage_type      = "gp3"
+  db_name           = var.db_name
+  username          = var.db_username
+  # write-only: AWS には渡すが state には保存しない。
+  # 値を変えても差分は検出されないため、パスワードを変えるときは version を上げる
+  password_wo                 = var.db_password
+  password_wo_version         = 1
   db_subnet_group_name        = aws_db_subnet_group.db[0].name
   vpc_security_group_ids      = [aws_security_group.db[0].id]
   multi_az                    = false
@@ -57,14 +60,24 @@ resource "aws_db_instance" "mysql" {
 # DB 接続情報を SSM Parameter Store（SecureString）に格納。ECS が secrets で参照。
 resource "aws_ssm_parameter" "db" {
   for_each = var.enable_db ? {
-    host     = aws_db_instance.mysql[0].address
-    port     = tostring(aws_db_instance.mysql[0].port)
-    name     = var.db_name
-    user     = var.db_username
-    password = var.db_password
+    host = aws_db_instance.mysql[0].address
+    port = tostring(aws_db_instance.mysql[0].port)
+    name = var.db_name
+    user = var.db_username
   } : {}
 
   name  = "/${local.name}/db/${each.key}"
   type  = "SecureString"
   value = each.value
+}
+
+# パスワードだけは write-only で格納し、state に残さない。
+# version は aws_db_instance.mysql の password_wo_version と揃えて上げること
+resource "aws_ssm_parameter" "db_password" {
+  count = var.enable_db ? 1 : 0
+
+  name             = "/${local.name}/db/password"
+  type             = "SecureString"
+  value_wo         = var.db_password
+  value_wo_version = 1
 }

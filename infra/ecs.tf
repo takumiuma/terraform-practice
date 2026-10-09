@@ -11,7 +11,7 @@ locals {
     { name = "DB_PORT", valueFrom = aws_ssm_parameter.db["port"].arn },
     { name = "DB_NAME", valueFrom = aws_ssm_parameter.db["name"].arn },
     { name = "DB_USER", valueFrom = aws_ssm_parameter.db["user"].arn },
-    { name = "DB_PASSWORD", valueFrom = aws_ssm_parameter.db["password"].arn },
+    { name = "DB_PASSWORD", valueFrom = aws_ssm_parameter.db_password[0].arn },
   ] : []
 
   container_definitions = jsonencode([

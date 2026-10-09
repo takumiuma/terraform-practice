@@ -64,6 +64,8 @@ variable "db_password" {
   type        = string
   default     = ""
   sensitive   = true
+  # ephemeral: state / plan ファイルに保存しない。write-only 引数にしか渡せない
+  ephemeral = true
 
   validation {
     condition     = !var.enable_db || length(var.db_password) >= 8

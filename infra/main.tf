@@ -138,7 +138,7 @@ data "aws_iam_policy_document" "task_execution_ssm" {
   count = var.enable_db ? 1 : 0
   statement {
     actions   = ["ssm:GetParameters"]
-    resources = [for p in aws_ssm_parameter.db : p.arn]
+    resources = concat([for p in aws_ssm_parameter.db : p.arn], aws_ssm_parameter.db_password[*].arn)
   }
   statement {
     actions   = ["kms:Decrypt"]

@@ -27,8 +27,8 @@ legacy-ec2-practice/     過去の EC2/ASG/ALB 練習用コード（本命とは
 - **ECR:** scan-on-push(Basic) 有効、**イメージタグは IMMUTABLE**（同名タグの上書き不可）、コミット SHA タグ運用、`force_delete`（destroy で削除）
 - **DB（任意・Bolt2）:** RDS for MySQL `db.t4g.micro` / Single-AZ / 最小ストレージ / `skip_final_snapshot` / 非公開
 - **秘密:** SSM Parameter Store（SecureString）→ ECS タスクへ注入。コード/tfvars には置かず `TF_VAR_db_password` で渡す。
-  ただし DB パスワードはローカル state に平文で残る（`sensitive` は表示を隠すだけ）。
-  学習・使い捨て（ダミーデータのみ、state はコミットしない）前提のため許容している
+  DB パスワードは ephemeral 変数 + write-only 引数（`password_wo` / `value_wo`）で渡すため、state / plan に保存されない。
+  パスワードを変える場合は `rds.tf` の `password_wo_version` と `value_wo_version` を揃えて上げる（値の変更だけでは差分にならない）
 - **state:** ローカル（`infra/` 内）。コミットしない（`.gitignore` 済み）
 
 ## エンドポイント
@@ -45,7 +45,7 @@ legacy-ec2-practice/     過去の EC2/ASG/ALB 練習用コード（本命とは
 
 - AWS アカウントと認証（`aws configure` 済み、または適切な権限のプロファイル）。
   作成先アカウントは `aws sts get-caller-identity` で事前確認できる
-- Terraform >= 1.9、Go 1.22+、Docker（ローカルビルド時）、`jq`（CIで使用）
+- Terraform >= 1.11（write-only 引数を使うため）、Go 1.22+、Docker（ローカルビルド時）、`jq`（CIで使用）
 - GitHub リポジトリ（CI/CD を使う場合）
 
 ## 使い方: 段階的に立てる

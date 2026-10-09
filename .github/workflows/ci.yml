@@ -1,0 +1,79 @@
+name: ci
+
+# master への PR で CI（lint/test/secret scan/terraform検証/tflint）を実行。
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  pull-requests: write # gitleaks-action が検出結果を PR にコメントするために必要
+
+jobs:
+  # ---------------------------------------------------------------
+  # CI: lint / test / secret scan / terraform 検証（失敗でブロック）
+  # ---------------------------------------------------------------
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: app/go.sum
+
+      - name: gofmt (fail if unformatted)
+        working-directory: app
+        run: test -z "$(gofmt -l .)" || (echo 'run gofmt' && gofmt -l . && exit 1)
+
+      - name: go vet
+        working-directory: app
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.13.2
+          working-directory: app
+
+      - name: go test
+        working-directory: app
+        run: go test -cover ./...
+
+      - name: gitleaks (secret scan)
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.12.2"
+
+      - name: terraform fmt / validate
+        working-directory: infra
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: Setup tflint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.55.1
+
+      - name: tflint
+        working-directory: infra
+        env:
+          # tflint --init のプラグイン取得が未認証だと GitHub API のレート制限に
+          # 引っかかりやすいため、GITHUB_TOKEN を渡して認証済みリクエストにする
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tflint --init
+          tflint --recursive

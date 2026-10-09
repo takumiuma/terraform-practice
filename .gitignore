@@ -1,6 +1,10 @@
 .terraform
 *.tfstate
 *.tfstate.backup
+# 秘密は TF_VAR_* で渡す方針（variables.tf の db_password 参照）。
+# tfvars は既定で無視し、非秘密の値を共有したくなったら !dev.tfvars のように個別に許可する。
+*.tfvars
+*.tfvars.json
 
 # Logs
 logs

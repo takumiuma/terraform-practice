@@ -8,7 +8,7 @@
 
 ### FR1: Gin HTTP サーバー
 - **FR1.1** Gin サーバーは `/healthz` エンドポイントを提供し、正常時に HTTP 200 を返す。[Q1][Q6]
-- **FR1.2** Gin サーバーは MySQL に接続し、学習レベルの簡単な CRUD（または1行の read/write 確認）を行うエンドポイントを提供する。[Q7][Q8]
+- **FR1.2** Gin サーバーは MySQL に接続し、学習レベルの read/write 確認を行うエンドポイントを提供する。`POST /items`（ボディ `{"name":"..."}`）で 1 件作成して 201 と作成したレコードを返し、`GET /items` で一覧を 200 で返す。POST した内容が GET で読めることをもって read/write 確認とする。更新・削除（PUT/PATCH/DELETE）は持たない。DB 無効時（skeleton）は `/items` を登録せず 404 とする。[Q7][Q8]
 - **FR1.3** アプリ起動時に GORM の AutoMigrate でスキーマ（1テーブル程度）を初期化する。[Q8]
 - **FR1.4** Gin は本番相当モード（`gin.SetMode(gin.ReleaseMode)`）で動作し、エラーレスポンスに内部情報（スタックトレース等）を含めない。[team-practices Code Style]
 

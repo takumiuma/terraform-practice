@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +19,23 @@ import (
 )
 
 func main() {
+	// -healthcheck: ECS のコンテナヘルスチェック用。サーバーは起動せず、
+	// 起動中の自分の /healthz を叩いて結果を終了コード（0=正常, 1=異常）で返す。
+	healthcheck := flag.Bool("healthcheck", false, "check /healthz of the running server and exit")
+	flag.Parse()
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	if *healthcheck {
+		if err := checkHealth("http://127.0.0.1:" + port + "/healthz"); err != nil {
+			log.Fatalf("healthcheck failed: %v", err)
+		}
+		os.Exit(0)
+	}
+
 	// 本番相当モード。エラーレスポンスに内部情報を出さない。
 	gin.SetMode(gin.ReleaseMode)
 
@@ -28,11 +46,6 @@ func main() {
 	}
 
 	router := handler.NewRouter(db)
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
 
 	srv := &http.Server{
 		Addr:    ":" + port,

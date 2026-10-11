@@ -11,7 +11,7 @@ Gin (Go) の HTTP サーバーを **AWS ECS Fargate 上で最安・使い捨て*
 
 ```
 app/                     Gin アプリ（Go）
-  cmd/server/main.go     エントリポイント（ReleaseMode / graceful shutdown / DB接続）
+  cmd/server/main.go     エントリポイント（ReleaseMode / graceful shutdown / DB接続 / -healthcheck）
   internal/handler/      ルーティング・ハンドラ・DB(GORM)・テスト
   Dockerfile             distroless マルチステージ（静的バイナリ・非root・amd64固定）
 infra/                   Terraform 一式（VPC/ECS/ECR/RDS/IAM-OIDC/SSM/Logs）
@@ -22,6 +22,9 @@ legacy-ec2-practice/     過去の EC2/ASG/ALB 練習用コード（本命とは
 ## アーキテクチャ（最安構成）
 
 - **ECS Fargate** 最小サイズ（0.25 vCPU / 0.5 GB）、desired count = 1、オートスケールなし
+- **ヘルスチェック:** ALB が無いので ECS のコンテナヘルスチェックを使う。distroless には curl もシェルも
+  無いため、アプリ自身の `/server -healthcheck`（自分の `/healthz` を叩いて終了コードで返す）を 30 秒間隔で実行。
+  3 回連続失敗で UNHEALTHY → タスクが停止され、サービスが新しいタスクに置き換える
 - **ネットワーク:** VPC + パブリックサブネット(2AZ) + IGW。**NAT Gateway なし**。タスクにパブリック IP を直付け
 - **公開:** **ALB なし**。`http://<タスクのパブリックIP>:8080` に直接アクセス
 - **ECR:** scan-on-push(Basic) 有効、**イメージタグは IMMUTABLE**（同名タグの上書き不可）、コミット SHA タグ運用、`force_delete`（destroy で削除）
@@ -251,6 +254,9 @@ terraform state list        # 空なら Terraform 管理リソースは全て削
 - **`tag immutable` で push できない** … 同名タグは上書き不可。タグを変える。
 - **タスクが起動と停止を繰り返す** … `aws logs tail /ecs/gin-ecs-cheap --since 10m` で原因を確認。
   停止理由は `aws ecs describe-tasks ... --query 'tasks[0].stoppedReason'`。
+- **タスクが UNHEALTHY で入れ替わり続ける** … コンテナヘルスチェック（`/server -healthcheck`）が失敗している。
+  状態は `aws ecs describe-tasks ... --query 'tasks[0].containers[0].healthStatus'` で確認できる。
+  ログに `healthcheck failed` が出ていれば原因（接続拒否・タイムアウト等）が分かる
 - **`/items` が 404** … `enable_db=false`（skeleton モード）のタスク定義で起動している。DB を有効にして再 apply し、
   `aws ecs update-service` で新しいタスク定義をサービスに反映する（apply だけでは切り替わらない）。
 

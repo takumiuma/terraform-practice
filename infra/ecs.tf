@@ -29,6 +29,17 @@ locals {
         { name = "PORT", value = tostring(var.container_port) }
       ]
       secrets = local.db_secrets
+      # コンテナヘルスチェック: ECS エージェントがコンテナ内でコマンドを実行し、終了コード 0 なら HEALTHY。
+      # distroless にはシェルも curl も無いため、CMD-SHELL ではなく CMD 形式でアプリ自身の
+      # -healthcheck モード（/healthz を叩く）を呼ぶ。retries 回連続で失敗すると UNHEALTHY になり、
+      # essential コンテナなのでタスクが停止 → サービスが新しいタスクに置き換える。
+      healthCheck = {
+        command     = ["CMD", "/server", "-healthcheck"]
+        interval    = 30 # 実行間隔（秒）
+        timeout     = 5  # 1 回のコマンドの制限時間（秒）
+        retries     = 3  # UNHEALTHY と判定するまでの連続失敗回数
+        startPeriod = 10 # 起動直後の猶予（秒）。この間の失敗は retries に数えない
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options = {

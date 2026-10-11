@@ -72,7 +72,9 @@ resource "aws_ecs_service" "app" {
   }
 
   # task_definition は CI/CD 側（deploy.yml）が register-task-definition + update-service で更新するため、
-  # Terraform の apply で古い定義に巻き戻さないよう差分を無視する
+  # Terraform の apply で古い定義に巻き戻さないよう差分を無視する。
+  # 副作用として、Terraform 側で image_tag / enable_db を変えて新しいタスク定義を作っても
+  # サービスには反映されない。反映手順は README「2 回目以降の apply」を参照（aws ecs update-service）
   lifecycle {
     ignore_changes = [task_definition]
   }

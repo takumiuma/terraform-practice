@@ -61,6 +61,34 @@ legacy-ec2-practice/     過去の EC2/ASG/ALB 練習用コード（本命とは
 > `CannotPullImage` で起動失敗する。**先に ECR だけ作ってイメージを push** してから、
 > そのタグで残りを apply すること（下記手順）。
 
+> **重要（フラグは毎回同じものを付ける）:** `enable_db` や `create_github_oidc` は、付け忘れた
+> apply / destroy で既定値 `false` に戻ったとみなされ、**RDS や OIDC ロールが削除される**。
+> 毎回 `-var` を揃えるか、`infra/terraform.tfvars`（自動で読み込まれ、`.gitignore` 済み）に
+> 秘密以外のフラグを書いておくと付け忘れを防げる（パスワードは書かず `TF_VAR_db_password` で渡す）。
+>
+> ```hcl
+> # infra/terraform.tfvars（例。コミットされない）
+> enable_db          = true
+> create_github_oidc = true
+> github_owner       = "<owner>"
+> github_repo        = "<repo>"
+> ```
+
+> **重要（2 回目以降の apply はサービスに自動反映されない）:** タスク定義は CI/CD（deploy.yml）も
+> 更新するため、`aws_ecs_service` は `task_definition` の差分を無視している（`infra/ecs.tf`）。
+> そのため **既にサービスがある状態で** `image_tag` や `enable_db` を変えて apply すると、新しい
+> タスク定義は登録されるが、サービスは古い定義のまま動き続ける。apply 後に次のコマンドで
+> 最新のタスク定義へ切り替える:
+>
+> ```bash
+> aws ecs update-service --cluster gin-ecs-cheap --service gin-ecs-cheap \
+>   --task-definition gin-ecs-cheap --region ap-northeast-1 >/dev/null
+> aws ecs wait services-stable --cluster gin-ecs-cheap --services gin-ecs-cheap --region ap-northeast-1
+> ```
+>
+> （`--task-definition` にファミリー名だけを渡すと、最新の ACTIVE リビジョン＝直前の apply で
+> 登録したものが使われる。初回 apply でサービスを新規作成するときは不要）
+
 ### ステップ 1: ECR を作ってイメージを push
 
 ```bash
@@ -101,6 +129,13 @@ cd infra
 export TF_VAR_db_password='<好きな強いパスワード>'   # tfvars に書かない
 terraform apply -var="enable_db=true" -var="image_tag=$SHA"
 ```
+
+ステップ 2A の後にこれを実行した（サービスが既にある）場合は、DB 接続情報を含む新しいタスク定義が
+サービスに反映されないため、上記「2 回目以降の apply」の `aws ecs update-service` を実行する
+（実行しないと `/items` が 404 のまま）。
+
+`enable_db=true` の間は、以降のどの apply / destroy でも `TF_VAR_db_password` が必要
+（未設定だと validation エラーになる）。
 
 RDS は作成完了まで数分かかる。タスクが接続に失敗する場合は少し待って再確認する。
 
@@ -156,8 +191,12 @@ cd infra
 # skeleton（DBなし）で立てた場合
 terraform destroy
 
-# DB ありで立てた場合
+# DB ありで立てた場合（validation のため TF_VAR_db_password が必要）
+# destroy ではパスワードの値は使われないので、apply 時と別のシェルなら 8 文字以上の任意の値でよい
+export TF_VAR_db_password='<apply 時のパスワード or 8文字以上の任意の値>'
 terraform destroy -var="enable_db=true"
+
+# OIDC ロールも作っていた場合は、同じく create_github_oidc 等も付ける（terraform.tfvars に書いていれば不要）
 ```
 
 destroy 後の確認:
@@ -184,6 +223,8 @@ terraform state list        # 空なら Terraform 管理リソースは全て削
 ### 必要な設定
 
 - 先に `terraform apply -var="create_github_oidc=true" -var="github_owner=<owner>" -var="github_repo=<repo>"` で OIDC ロールを作成
+- 以降の apply / destroy でもこの 3 つの `-var` を付け続ける（付け忘れると OIDC ロールが削除される）。
+  `infra/terraform.tfvars` に書いておくのが確実（「使い方」の冒頭参照）
 - 出力された `github_actions_role_arn` を GitHub の **Secrets** に `AWS_DEPLOY_ROLE_ARN` として登録
 - 長期アクセスキーは登録しない（OIDC で引き受ける）
 - CI/CD を使わずローカルからデプロイするだけなら OIDC は不要（`create_github_oidc=false` のまま）
@@ -192,15 +233,17 @@ terraform state list        # 空なら Terraform 管理リソースは全て削
 
 - **`exec /server: exec format error`** … イメージのアーキ不一致（arm64 を x86 の Fargate で実行）。
   `app/Dockerfile` で amd64 固定済みなので通常は起きないが、独自にビルドし直す際は
-  `docker build --platform linux/amd64` を確認。タグを変えて push し直し、`terraform apply -var="image_tag=<新タグ>"`。
+  `docker build --platform linux/amd64` を確認。タグを変えて push し直し、`terraform apply -var="image_tag=<新タグ>"` の後に
+  「2 回目以降の apply」の `aws ecs update-service` でサービスに反映する。
 - **`tag immutable` で push できない** … 同名タグは上書き不可。タグを変える。
 - **タスクが起動と停止を繰り返す** … `aws logs tail /ecs/gin-ecs-cheap --since 10m` で原因を確認。
   停止理由は `aws ecs describe-tasks ... --query 'tasks[0].stoppedReason'`。
-- **`/items` が 404** … `enable_db=false`（skeleton モード）で起動している。DB を有効にして再 apply。
+- **`/items` が 404** … `enable_db=false`（skeleton モード）のタスク定義で起動している。DB を有効にして再 apply し、
+  `aws ecs update-service` で新しいタスク定義をサービスに反映する（apply だけでは切り替わらない）。
 
 ## コストの注意
 
-- **使い終わったら必ず `terraform destroy`**（DB ありなら `-var="enable_db=true"` を付ける）。
+- **使い終わったら必ず `terraform destroy`**（DB ありなら `-var="enable_db=true"` と `TF_VAR_db_password` が必要）。
   RDS を有効にした場合は起動時間とストレージが課金される
 - ALB・NAT Gateway を持たないため、常設の固定費は最小。停止中（destroy 済み）ならほぼ 0 円
 - ECR に残るイメージにも僅かに課金される。`force_delete` により destroy でリポジトリごと削除される

@@ -67,6 +67,8 @@ variable "db_password" {
   # ephemeral: state / plan ファイルに保存しない。write-only 引数にしか渡せない
   ephemeral = true
 
+  # destroy 時もこの validation が評価されるため、enable_db=true の destroy でも TF_VAR_db_password が必要
+  # （destroy では値は使われないので 8 文字以上なら任意の値でよい）
   validation {
     condition     = !var.enable_db || length(var.db_password) >= 8
     error_message = "enable_db=true の場合、db_password は8文字以上で指定してください（TF_VAR_db_password で渡す）。"

@@ -1,15 +1,22 @@
 # CI/CD Pipeline Design — gin-app
 
-GitHub → GitHub Actions → ECR → ECS。`master` へのマージ（または手動 dispatch）で起動。OIDC で AWS 認証（長期キーなし）。
+GitHub → GitHub Actions → ECR → ECS。ワークフローは 2 本に分ける。
+
+- **CI（`.github/workflows/ci.yml`）**: `master` への PR で起動。ステージ 1〜4 を実行し、失敗でマージをブロック。
+- **CD（`.github/workflows/deploy.yml`）**: `master` への push（マージ）または手動 dispatch で起動。ステージ 5〜9 を実行。OIDC で AWS 認証（長期キーなし）。
+
+`master` には CI を通過した変更しか入らない前提のため、CD 側では CI のゲートを再実行しない。
 
 ## パイプライン ステージ → ゲート
 
 | ステージ | 内容 | ゲート（失敗でブロック） |
 |----------|------|--------------------------|
+| **CI（PR 時）** | | |
 | 1. Lint/Format | `gofmt -l`、`go vet`、`golangci-lint`（errcheck/staticcheck/govet） | ✅ [project.md Mandated] |
 | 2. Secret scan | `gitleaks` | ✅ |
 | 3. Test | `go test ./...`（-cover 可視化のみ） | ✅（テスト失敗でブロック） |
 | 4. Terraform 検証 | `terraform fmt -check`、`terraform validate`、`tflint` | ✅ |
+| **CD（master push / dispatch 時）** | | |
 | 5. Build image | Docker マルチステージ（distroless/scratch）、SHAタグ | ✅ |
 | 6. AWS 認証 | `aws-actions/configure-aws-credentials`（OIDC、`id-token: write`、`role-to-assume`） | 長期キー不使用 [NFR3.1] |
 | 7. ECR push | SHAタグで push（`latest` 非依存） | [FR2.2] |

@@ -34,7 +34,7 @@ GitHub Actions から AWS への認証は OIDC + IAM ロール引き受けで行
 
 ## Deployment
 
-`master` へのマージを契機に GitHub Actions が動く。パイプラインは Go のビルドとテスト → Docker イメージのビルド → ECR への push（イメージタグはコミット SHA を使い `latest` に依存しない）→ ECS へのデプロイ、の順で進む。
+GitHub Actions のワークフローは CI と CD に分ける。CI（`ci.yml`）は `master` への PR で動き、Go のビルドとテストや各種 lint をブロッキングゲートとして実行する（CI が緑でないとマージできない）。CD（`deploy.yml`）は `master` への push（＝マージ）または手動 dispatch で動き、Docker イメージのビルド → ECR への push（イメージタグはコミット SHA を使い `latest` に依存しない）→ ECS へのデプロイ → スモーク、の順で進む。`master` には CI を通過した変更しか入らない前提のため、CD 側では CI のチェックを再実行しない。
 
 CI では以下を必須ゲートとし、失敗時はマージをブロックする。
 - Go: `gofmt`（未整形は差分検知で非ゼロ終了）、`go vet`、`golangci-lint`（少なくとも `errcheck`/`staticcheck`/`govet` を有効化）。

@@ -220,6 +220,19 @@ terraform state list        # 空なら Terraform 管理リソースは全て削
   2. **deploy:** タスク定義の image を差し替えて register → service を update → 安定待ち
   3. **smoke:** 実行中タスクのパブリック IP に `curl --fail .../healthz`
 
+> **deploy は環境を立てている間だけ成功する:** 普段は `terraform destroy` 済みのため、`master` への
+> push で起動した deploy は AWS 認証（OIDC ロールが無い）や ECR push で失敗する。これは想定どおり。
+> 環境を `terraform apply` した後に CI/CD でデプロイしたい場合は、失敗した実行を **Re-run** するか、
+> Actions 画面から **Run workflow（`workflow_dispatch`）を `master` ブランチで** 実行する。
+>
+> - OIDC の信頼ポリシーは `refs/heads/master` に限定しているため、`master` 以外のブランチで
+>   dispatch すると AWS 認証で失敗する
+> - OIDC ロールは名前固定なので、destroy → apply で作り直しても ARN は変わらず、Secrets の
+>   `AWS_DEPLOY_ROLE_ARN` は登録し直さなくてよい（`create_github_oidc=true` で apply していること）
+> - ECR だけある状態（ステップ 1 の途中など）で走った実行は、イメージ push まで成功して後続で
+>   失敗する。同じコミットで再実行すると、タグが IMMUTABLE のため push が `tag immutable` で失敗する。
+>   その場合は新しいコミットを `master` に push するか、ECR から該当タグのイメージを削除してから再実行する
+
 ### 必要な設定
 
 - 先に `terraform apply -var="create_github_oidc=true" -var="github_owner=<owner>" -var="github_repo=<repo>"` で OIDC ロールを作成

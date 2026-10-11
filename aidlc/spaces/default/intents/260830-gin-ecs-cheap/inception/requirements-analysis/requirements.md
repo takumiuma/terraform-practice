@@ -29,7 +29,7 @@
 - **FR4.4** 【フォールバック条件】RDS 構成で月額コストが1,000円を超える見込みが強い場合、DynamoDB（オンデマンド課金）等の次善策をインフラ設計フェーズで検討・提案する。[Q7]
 
 ### FR5: ビルド・デプロイパイプライン
-- **FR5.1** GitHub にソースを置き、`main` へのマージを契機に GitHub Actions が動く。パイプラインは Go ビルド/テスト → Docker イメージビルド → ECR push（SHA タグ）→ ECS デプロイの順で進む。[intent-statement][team-practices Deployment]
+- **FR5.1** GitHub にソースを置き、`master` へのマージを契機に GitHub Actions が動く。パイプラインは Go ビルド/テスト → Docker イメージビルド → ECR push（SHA タグ）→ ECS デプロイの順で進む。[intent-statement][team-practices Deployment]
 - **FR5.2** GitHub Actions から AWS への認証は OIDC + IAM ロール引き受けで行い、長期アクセスキーを GitHub Secrets に置かない。信頼ポリシーは当該リポジトリ/ブランチに絞り、デプロイロールは最小権限とする。[project.md Mandated][Q5 認証方針]
 - **FR5.3** サードパーティの GitHub Actions はコミット SHA でピン留めする。[team-practices]
 

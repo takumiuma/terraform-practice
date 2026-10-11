@@ -33,4 +33,4 @@
 
 - Construction iteration: **unit-major**（skeleton を成すユニットを設計・実装して動かしてから次へ。早期に動くコードを得る）
 - Construction staffing: **solo**（このセッションで1つずつ、各ステージで人間が確認）
-- 分岐（base/target ブランチ）: `main`、squash マージ（team practices の Way of Working に従う）
+- 分岐（base/target ブランチ）: `master`、squash マージ（team practices の Way of Working に従う）

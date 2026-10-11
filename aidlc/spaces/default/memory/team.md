@@ -7,9 +7,9 @@
 
 ## Way of Working
 
-トランクベース開発を採用する。すべての作業は短命なフィーチャーブランチ（1〜2日で解消）経由で `main` にマージする。単独開発かつ実験プロジェクトのため、長命ブランチや `develop`/`release` ブランチは持たない。単独作業では直接 `main` にコミットする運用も許容する。
+トランクベース開発を採用する。すべての作業は短命なフィーチャーブランチ（1〜2日で解消）経由で `master` にマージする。単独開発かつ実験プロジェクトのため、長命ブランチや `develop`/`release` ブランチは持たない。単独作業では直接 `master` にコミットする運用も許容する。
 
-`main` へは squash マージする。1つの作業単位が `main` 上の1コミットになり、線形で読みやすい履歴を保つ。Construction のワークツリーを使う場合も base/target はともに `main` とする。
+`master` へは squash マージする。1つの作業単位が `master` 上の1コミットになり、線形で読みやすい履歴を保つ。Construction のワークツリーを使う場合も base/target はともに `master` とする。
 
 環境は staging/production の常設多段構成を持たない。エフェメラルな create/destroy モデルで運用し、必要なときだけ環境を立てて使い終わったら破棄する。環境の差異はブランチではなく Terraform の変数やデプロイ設定で表現する。
 
@@ -34,14 +34,14 @@ GitHub Actions から AWS への認証は OIDC + IAM ロール引き受けで行
 
 ## Deployment
 
-`main` へのマージを契機に GitHub Actions が動く。パイプラインは Go のビルドとテスト → Docker イメージのビルド → ECR への push（イメージタグはコミット SHA を使い `latest` に依存しない）→ ECS へのデプロイ、の順で進む。
+`master` へのマージを契機に GitHub Actions が動く。パイプラインは Go のビルドとテスト → Docker イメージのビルド → ECR への push（イメージタグはコミット SHA を使い `latest` に依存しない）→ ECS へのデプロイ、の順で進む。
 
 CI では以下を必須ゲートとし、失敗時はマージをブロックする。
 - Go: `gofmt`（未整形は差分検知で非ゼロ終了）、`go vet`、`golangci-lint`（少なくとも `errcheck`/`staticcheck`/`govet` を有効化）。
 - Terraform: `terraform fmt`、`terraform validate`、`tflint`。
 - シークレットスキャン: `gitleaks`（誤コミット検知でブロック）。
 
-GitHub Actions から AWS への認証は `aws-actions/configure-aws-credentials` を OIDC モード（`id-token: write` パーミッション + `role-to-assume`）で使い、`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` を GitHub Secrets に保存しない。信頼ポリシーの `sub` 条件は当該リポジトリ/ブランチ（例: `repo:<owner>/<repo>:ref:refs/heads/main`）に絞り、ワイルドカードを避ける。デプロイロールは ECR push + ECS デプロイ + 必要な Terraform 操作に絞る最小権限とする。サードパーティの GitHub Actions はメジャータグではなくコミット SHA でピン留めする。
+GitHub Actions から AWS への認証は `aws-actions/configure-aws-credentials` を OIDC モード（`id-token: write` パーミッション + `role-to-assume`）で使い、`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` を GitHub Secrets に保存しない。信頼ポリシーの `sub` 条件は当該リポジトリ/ブランチ（例: `repo:<owner>/<repo>:ref:refs/heads/master`）に絞り、ワイルドカードを避ける。デプロイロールは ECR push + ECS デプロイ + 必要な Terraform 操作に絞る最小権限とする。サードパーティの GitHub Actions はメジャータグではなくコミット SHA でピン留めする。
 
 ECR リポジトリは scan-on-push（Basic scanning・無料）を有効化する。イメージのベースは distroless か scratch など最小構成とし、Go のスタティックバイナリを載せて攻撃面とイメージサイズ（＝転送/ストレージコスト）を下げる。
 

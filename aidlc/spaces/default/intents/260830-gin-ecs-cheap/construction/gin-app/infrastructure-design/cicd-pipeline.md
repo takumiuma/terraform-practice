@@ -1,6 +1,6 @@
 # CI/CD Pipeline Design — gin-app
 
-GitHub → GitHub Actions → ECR → ECS。`main` へのマージ（または手動 dispatch）で起動。OIDC で AWS 認証（長期キーなし）。
+GitHub → GitHub Actions → ECR → ECS。`master` へのマージ（または手動 dispatch）で起動。OIDC で AWS 認証（長期キーなし）。
 
 ## パイプライン ステージ → ゲート
 

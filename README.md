@@ -10,12 +10,14 @@ Gin (Go) の HTTP サーバーを **AWS ECS Fargate 上で最安・使い捨て*
 ## リポジトリ構成
 
 ```
-app/                     Gin アプリ（Go）
-  cmd/server/main.go     エントリポイント（ReleaseMode / graceful shutdown / DB接続 / -healthcheck）
-  internal/handler/      ルーティング・ハンドラ・DB(GORM)・テスト
+app/                     Gin アプリ（Go）。ECS 版と Lambda 版で共通
+  cmd/server/main.go     ECS 用エントリポイント（ReleaseMode / graceful shutdown / DB接続 / -healthcheck）
+  cmd/lambda/main.go     Lambda 用エントリポイント（Function URL → Gin。lambda-efs-sqlite で使用）
+  internal/handler/      ルーティング・ハンドラ・DB(GORM: MySQL / SQLite)・テスト
   Dockerfile             distroless マルチステージ（静的バイナリ・非root・amd64固定）
 infra/                   Terraform 一式（VPC/ECS/ECR/RDS/IAM-OIDC/SSM/Logs）
-.github/workflows/       CI/CD（lint/test/tf検証 → build → ECR push → ECS deploy → smoke）
+lambda-efs-sqlite/       立てっぱなし前提の Lambda + EFS + SQLite 構成（詳細は同ディレクトリの README）
+.github/workflows/       CI/CD（lint/test/tf検証、ECS: build → ECR push → deploy → smoke、Lambda: build → コード更新 → smoke）
 legacy-ec2-practice/     過去の EC2/ASG/ALB 練習用コード（本命とは無関係・退避）
 ```
 
@@ -40,7 +42,8 @@ legacy-ec2-practice/     過去の EC2/ASG/ALB 練習用コード（本命とは
 |----------|------|------|
 | GET | `/healthz` | ヘルスチェック。`{"status":"ok"}` を返す（DB非依存） |
 | POST | `/items` | アイテム作成。ボディ `{"name":"..."}`。DB有効時のみ |
-| GET | `/items` | アイテム一覧。DB有効時のみ |
+| GET | `/items` | アイテム一覧（id 昇順）。DB有効時のみ |
+| DELETE | `/items/{id}` | アイテム削除。DB有効時のみ |
 
 `enable_db=false`（skeleton）では `/healthz` のみ。`/items` は 404 になる。
 
@@ -163,16 +166,19 @@ echo "IP = $IP"
 curl --fail "http://$IP:8080/healthz"          # -> {"status":"ok"}
 ```
 
-read/write 確認（`enable_db=true` のとき。作成・一覧のみで更新・削除はない）:
+read/write 確認（`enable_db=true` のとき）:
 
 ```bash
 # 作成
 curl -s -X POST "http://$IP:8080/items" \
   -H "Content-Type: application/json" \
-  -d '{"name":"first item"}'                    # -> {"id":1,"name":"first item"}
+  -d '{"name":"first item"}'                    # -> {"id":1,"name":"first item","created_at":"..."}
 
 # 一覧
 curl -s "http://$IP:8080/items"                 # -> [{"id":1,"name":"first item"}, ...]
+
+# 削除
+curl -s -X DELETE "http://$IP:8080/items/1"     # -> {"deleted":1}
 ```
 
 ログ確認（起動やエラーの切り分け）:
@@ -214,14 +220,19 @@ terraform state list        # 空なら Terraform 管理リソースは全て削
 
 - `.github/workflows/ci.yml`: `master` への PR で実行（失敗でブロック）
   1. `gofmt`/`go vet`/`golangci-lint`
-  2. `go test`
+  2. `go test`、Lambda 用バイナリ（arm64）のビルド確認
   3. `gitleaks`（secret scan）
-  4. `terraform fmt/validate`
-  5. `tflint`
-- `.github/workflows/deploy.yml`: `master` への push で実行
+  4. `terraform fmt/validate`（`infra/` と `lambda-efs-sqlite/`）
+  5. `tflint`（同上）
+- `.github/workflows/deploy.yml`: `master` への push で実行（ECS 版）
   1. **build:** Docker イメージをビルドし ECR に push（タグ = コミット SHA）
   2. **deploy:** タスク定義の image を差し替えて register → service を update → 安定待ち
   3. **smoke:** 実行中タスクのパブリック IP に `curl --fail .../healthz`
+- `.github/workflows/deploy-lambda.yml`: `master` への push（`app/**` 等の変更時）で実行（Lambda 版）。
+  設定は [`lambda-efs-sqlite/README.md`](lambda-efs-sqlite/README.md) の「CD の設定」を参照
+  1. **build:** `lambda-efs-sqlite/build.sh` で arm64 の `bootstrap` をビルドして zip 化
+  2. **deploy:** `aws lambda update-function-code` → 更新完了待ち
+  3. **smoke:** Function URL の `/healthz` を SigV4 署名付きで `curl --fail`
 
 > **deploy は環境を立てている間だけ成功する:** 普段は `terraform destroy` 済みのため、`master` への
 > push で起動した deploy は AWS 認証（OIDC ロールが無い）や ECR push で失敗する。これは想定どおり。

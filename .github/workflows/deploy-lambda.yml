@@ -1,0 +1,71 @@
+name: deploy-lambda
+
+# master への push で Lambda（lambda-efs-sqlite）の CD（ビルド → コード更新 → スモーク）を実行。
+# 手動実行も可能。AWS 認証は OIDC + IAM ロール引き受け（長期キーなし）。
+# インフラ（VPC/EFS/関数本体）は Terraform、コードの更新はこのワークフローが担当する。
+on:
+  push:
+    branches: [master]
+    paths:
+      - "app/**"
+      - "lambda-efs-sqlite/build.sh"
+      - ".github/workflows/deploy-lambda.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC でトークンを取得するために必須
+
+env:
+  AWS_REGION: ap-northeast-1
+  FUNCTION_NAME: lambda-efs-sqlite-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: app/go.sum
+
+      - name: Build (arm64 bootstrap) and zip
+        run: |
+          ./lambda-efs-sqlite/build.sh
+          cd lambda-efs-sqlite/build
+          zip -j lambda.zip bootstrap
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ secrets.AWS_LAMBDA_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update function code
+        run: |
+          aws lambda update-function-code --function-name "$FUNCTION_NAME" \
+            --zip-file fileb://lambda-efs-sqlite/build/lambda.zip \
+            --query '{version: Version, sha256: CodeSha256}' --output table
+          aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+
+      - name: Smoke test (/healthz, SigV4 signed)
+        run: |
+          # Function URL は IAM 認証のため、引き受けたロールの一時クレデンシャルで署名して呼ぶ
+          URL=$(aws lambda get-function-url-config --function-name "$FUNCTION_NAME" \
+            --query FunctionUrl --output text)
+          for i in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --max-time 15 \
+                --aws-sigv4 "aws:amz:${AWS_REGION}:lambda" \
+                --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
+                -H "x-amz-security-token: ${AWS_SESSION_TOKEN}" \
+                "${URL}healthz"; then
+              echo; echo "smoke test passed"
+              exit 0
+            fi
+            echo "retry $i..."; sleep 10
+          done
+          echo "smoke test failed"; exit 1
